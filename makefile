@@ -8,7 +8,7 @@ LDFLAGS=-lpthread
 
 RM=rm -f
 
-SOURCES=./ADC/Adc.cpp ./BlackGPIO/BlackGPIO.cpp ./BlackADC/BlackADC.cpp ./BlackDirectory/BlackDirectory.cpp ./BlackI2C/BlackI2C.cpp BlackMutex/BlackMutex.cpp BlackPWM/BlackPWM.cpp BlackSPI/BlackSPI.cpp BlackThread/BlackThread.cpp BlackTime/BlackTime.cpp BlackUART/BlackUART.cpp ./BlackCore.cpp ./main.cpp
+//SOURCES=./ADC/Adc.cpp ./BlackGPIO/BlackGPIO.cpp ./BlackADC/BlackADC.cpp ./BlackDirectory/BlackDirectory.cpp ./BlackI2C/BlackI2C.cpp BlackMutex/BlackMutex.cpp BlackPWM/BlackPWM.cpp BlackSPI/BlackSPI.cpp BlackThread/BlackThread.cpp BlackTime/BlackTime.cpp BlackUART/BlackUART.cpp ./BlackCore.cpp ./main.cpp
 
 OBJECTS=$(SOURCES:.cpp=.o)
 
