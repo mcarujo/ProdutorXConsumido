@@ -31,7 +31,7 @@ int numero;
 		*/
 void *thread_consumidor(void *arg);
 void *thread_produtor(void *arg);
-int controle(int numero);
+int controle(int numero,bool action);
 
 /****************** FIM de Globais ***********************/
 
@@ -78,7 +78,7 @@ int main()
 
 void *thread_produtor(void *valor)
 {
-	BlackLib::BlackGPIO entrada_produtor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
+	//BlackLib::BlackGPIO entrada_produtor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
 	int numero=0,buffer=0;
 	while (1)
 	{
@@ -96,7 +96,7 @@ void *thread_produtor(void *valor)
 void *thread_consumidor(void *valor)
 {
 	
-	BlackLib::BlackGPIO entrada_consumidor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
+	//BlackLib::BlackGPIO entrada_consumidor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
 	while (1)
 	{
 		
