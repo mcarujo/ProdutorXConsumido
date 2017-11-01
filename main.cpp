@@ -26,6 +26,7 @@ using namespace std;
 pthread_mutex_t work_mutex;
 int numero = 0;
 
+BlackLib::BlackGPIO entrada(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
 // Display
 Display display(BlackLib::GPIO_65, BlackLib::GPIO_45,
 					BlackLib::GPIO_69, BlackLib::GPIO_60, BlackLib::GPIO_27, BlackLib::GPIO_66,
@@ -46,45 +47,55 @@ int main()
 	pthread_t consumdior, produtor;
 	void * statusFinalizacao;
 	
-	display.showNumber(0000);
+	
+	while(1){
+		printf("Programa principal criando thread consumidor...\n");
+		res = pthread_create(&consumdior, NULL, thread_consumidor, (void *)&valor);
+		if (res != 0)
+		{
+			perror("A Craição da Thread consumidor falhou");
+			exit(EXIT_FAILURE);
+		}
 
-	printf("Programa principal criando thread consumidor...\n");
-	res = pthread_create(&consumdior, NULL, thread_consumidor, (void *)&valor);
-	if (res != 0)
-	{
-		perror("A Craição da Thread consumidor falhou");
-		exit(EXIT_FAILURE);
+
+		printf("Programa principal criando thread produtor...\n");
+		res = pthread_create(&produtor, NULL, thread_produtor, (void *)&valor);
+		if (res != 0)
+		{
+			perror("A Craição da Thread produtor falhou");
+			exit(EXIT_FAILURE);
+		}
+
+		/*
+			printf("Programa principal esperando pelo término das threads...\n");
+			res = pthread_join(consumdior, &statusFinalizacao);
+			if (res != 0) {
+			perror("O thread_join falhou");
+			exit(EXIT_FAILURE);
+			}
+			res = pthread_join(produtor, &statusFinalizacao);
+			if (res != 0) {
+			perror("O thread_join falhou");
+			exit(EXIT_FAILURE);
+			}
+		
+			exit(EXIT_SUCCESS);
+		*/
+		while(entrada.getValue() == "1");
+		pthread_cancel(consumdior);
+		pthread_cancel(produtor);
+		display.showNumber(0);
+		pthread_mutex_unlock(&work_mutex);
+		numero = 0;
+		sleep(1);
 	}
-
-
-	printf("Programa principal criando thread produtor...\n");
-	res = pthread_create(&produtor, NULL, thread_produtor, (void *)&valor);
-	if (res != 0)
-	{
-		perror("A Craição da Thread produtor falhou");
-		exit(EXIT_FAILURE);
-	}
-
-
-	printf("Programa principal esperando pelo término das threads...\n");
-    res = pthread_join(consumdior, &statusFinalizacao);
-    if (res != 0) {
-        perror("O thread_join falhou");
-        exit(EXIT_FAILURE);
-    }
-	res = pthread_join(produtor, &statusFinalizacao);
-    if (res != 0) {
-        perror("O thread_join falhou");
-        exit(EXIT_FAILURE);
-    }
-   
-    exit(EXIT_SUCCESS);
 }
 
 void *thread_produtor(void *valor)
 {
 	//BlackLib::BlackGPIO entrada_produtor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
-	
+	int prevType;
+   	 pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &prevType);
 	float perc1;
 	ADC pot1(AIN0); // pot1 = consumidor
 	
@@ -112,6 +123,8 @@ void *thread_produtor(void *valor)
 
 void *thread_consumidor(void *valor)
 {
+	int prevType;
+   	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &prevType);
 	float perc2;
 	ADC pot2(AIN1); // pot2 = produtor
 	
@@ -136,7 +149,6 @@ void *thread_consumidor(void *valor)
 	}
 
 }
-
 
 int controle(int numero, bool action)
 {

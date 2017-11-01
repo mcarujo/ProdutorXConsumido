@@ -27,10 +27,10 @@ Display::Display(BlackLib::gpioName d1, BlackLib::gpioName d2,
     
     
     /* High select the digit */
-    digit1->setValue(BlackLib::low);
-    digit2->setValue(BlackLib::low);
-    digit3->setValue(BlackLib::low);
-    digit4->setValue(BlackLib::low);
+    digit1->setValue(BlackLib::high);
+    digit2->setValue(BlackLib::high);
+    digit3->setValue(BlackLib::high);
+    digit4->setValue(BlackLib::high);
     
     /* High voltage is off and low voltage is on */
     segA->setValue(BlackLib::high);
@@ -41,10 +41,6 @@ Display::Display(BlackLib::gpioName d1, BlackLib::gpioName d2,
     segF->setValue(BlackLib::high);
     segG->setValue(BlackLib::high);
     segDP->setValue(BlackLib::high);
-    
-    /* Initialize thread */
-    std::thread t(&Display::worker, this);
-    t.detach();
     
 }
 
@@ -183,6 +179,12 @@ void Display::turnOnSegments(uint8_t number)
         break;
     }
     
+
+    
+}
+
+void Display::showNumber(uint16_t _number)
+{
     usleep(1000);
     segA->setValue(BlackLib::high);
     segB->setValue(BlackLib::high);
@@ -192,54 +194,6 @@ void Display::turnOnSegments(uint8_t number)
     segF->setValue(BlackLib::high);
     segG->setValue(BlackLib::high);
     segDP->setValue(BlackLib::high);
-    
-}
+    turnOnSegments(_number);  
 
-void Display::worker()
-{
-    uint8_t d1, d2, d3, d4; 
-    uint16_t localNumber;
-    
-    while(1)
-    {
-        mtx.lock();
-        localNumber = number;
-        mtx.unlock();
-
-        if(localNumber > 9999)
-        {
-            throw invalid_argument( "Number must be between 0 and 9999");
-        }
-        
-        d1 = (localNumber/1000) % 10;
-        d2 = (localNumber/100) % 10;
-        d3 = (localNumber/10) % 10;
-        d4 = (localNumber/1) % 10;
-    
-        digit1->setValue(BlackLib::high);
-        segDP->setValue(BlackLib::low); // Point here
-        turnOnSegments(d1);
-        digit1->setValue(BlackLib::low);
-        
-        digit2->setValue(BlackLib::high);
-        turnOnSegments(d2);
-        digit2->setValue(BlackLib::low);
-        
-        digit3->setValue(BlackLib::high);
-        turnOnSegments(d3);
-        digit3->setValue(BlackLib::low);
-        
-        digit4->setValue(BlackLib::high);
-        turnOnSegments(d4);
-        digit4->setValue(BlackLib::low);
-        
-    }
-}
-
-
-void Display::showNumber(uint16_t _number)
-{
-    mtx.lock();
-    number = _number;   
-    mtx.unlock(); 
 }
