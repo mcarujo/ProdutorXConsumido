@@ -24,12 +24,10 @@ using namespace std;
 
 int buffer[BUFFER_SIZE]; /* Buffer */
 int buffer_index;
+int num_items = 0;
 pthread_mutex_t buffer_mutex; /* Mutex do buffer */
 sem_t buffer_cheio;  /* Quando for 0, o buffer está cheio. */
 sem_t buffer_vazio; /* Quando for 0, o buffer está vazio (funciona como um índice). */
-
-// Botão de reset.
-BlackLib::BlackGPIO entrada(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
 
 // Display
 Display display(BlackLib::GPIO_65, BlackLib::GPIO_45,
@@ -41,147 +39,160 @@ Display display(BlackLib::GPIO_65, BlackLib::GPIO_45,
 
 void *thread_consumidor(void *arg);
 void *thread_produtor(void *arg);
+void resetar_buffer(void);
 
 /****************** FIM de Globais ***********************/
 
 int main()
 {	
-	int res, i;
-	pthread_t consumdior, produtor;
-	
-	buffer_index = 0;
-	
-	sem_init(&buffer_cheio, 0, BUFFER_SIZE);
-    sem_init(&buffer_vazio, 0, 0);
-    pthread_mutex_init(&buffer_mutex, NULL);
+    int res;
+    pthread_t consumdior, produtor;
+    // Botão de reset.
+    BlackLib::BlackGPIO entrada(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);	
     
-    for(i = 0; i < BUFFER_SIZE; i++)
+
+    resetar_buffer();
+    display.showNumber(0);
+	
+    while(1)
     {
-		buffer[i] = 0;
+	printf("Programa principal criando thread consumidor...\n");
+	res = pthread_create(&consumdior, NULL, thread_consumidor, (void *) 1);
+	if (res != 0)
+	{
+	    perror("A Craição da Thread consumidor falhou");
+	    exit(EXIT_FAILURE);
+	}
+
+
+	printf("Programa principal criando thread produtor...\n");
+	res = pthread_create(&produtor, NULL, thread_produtor, (void *) 2);
+	if (res != 0)
+	{
+	    perror("A Craição da Thread produtor falhou");
+	    exit(EXIT_FAILURE);
 	}
 	
-	while(1)
-	{
-		printf("Programa principal criando thread consumidor...\n");
-		res = pthread_create(&consumdior, NULL, thread_consumidor, (void *) 1);
-		if (res != 0)
-		{
-			perror("A Craição da Thread consumidor falhou");
-			exit(EXIT_FAILURE);
-		}
+	// Aguarda o reset.
+	while(entrada.getValue() == "1");
 
-
-		printf("Programa principal criando thread produtor...\n");
-		res = pthread_create(&produtor, NULL, thread_produtor, (void *) 2);
-		if (res != 0)
-		{
-			perror("A Craição da Thread produtor falhou");
-			exit(EXIT_FAILURE);
-		}
-		
-		// Aguarda o reset.
-		//while(entrada.getValue() == "1");
-		while(1);
-		
-		// Cancela as threads.
-		pthread_cancel(consumdior);
-		pthread_cancel(produtor);
-		
-		//display.showNumber(0);
-		sleep(1);
-	}
+	// Cancela as threads.
+	pthread_cancel(consumdior);
+	pthread_cancel(produtor);
+	
+	resetar_buffer();
+	display.showNumber(0);
+	sleep(1);
+    }
 }
 
 void *thread_produtor(void *valor)
 {
-	//BlackLib::BlackGPIO entrada_produtor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
-	int prevType;
-	float perc1;
-	//ADC pot1(AIN0); // pot1 = consumidor
+    int prevType;
+    float perc1;
+    ADC pot1(AIN0); // pot1 = consumidor
+    
+    // A thread pode ser cancelada de forma assíncrona.
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &prevType);
+    
+    while (1)
+    {
+	//sem_getvalue(&buffer_cheio, &val);
+	//printf("Semáforo do produtor: %d\n", val);
+	    
+	perc1 = pot1.getPercentValue();	
+	usleep(perc1 * 100 * UNIT_MS); // Espera muito ou pouco
+	    
+	// Se o buffer está cheio, espere (decrementa 1 do buffer cheio). 
+	sem_wait(&buffer_cheio);
 	
-	// A thread pode ser cancelada de forma assíncrona.
-   	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &prevType);
+	// Trava o buffer.
+	pthread_mutex_lock(&buffer_mutex);
+		
+	// Insere o item no buffer.
+	buffer[buffer_index] = 1;
+	num_items++;
 	
-	int val;
-	
-	while (1)
+	if(buffer_index < BUFFER_SIZE-1)
 	{
-		sem_getvalue(&buffer_cheio, &val);
-		printf("\Semáforo do produtor: %d\n", val);
-		
-		perc1 = 10.0;
-	    //perc1 = pot1.getPercentValue();	
-		usleep(perc1 * 100 * UNIT_MS); // Espera muito ou pouco
-		
-		// Se o buffer está cheio, espere (decrementa 1 do buffer cheio). 
-        sem_wait(&buffer_cheio);
-        
-		// Trava o buffer.
-        pthread_mutex_lock(&buffer_mutex);
-        
-        // Insere o item no buffer.
-        buffer[buffer_index] = 1;
-        buffer_index = (buffer_index+1) % BUFFER_SIZE;
-        printf("Produzindo item %d ...\n", buffer_index);
-        fflush(stdout);
-        
-        // Libera o buffer.
-        pthread_mutex_unlock(&buffer_mutex);
-        
-        // Incrementa o semáforo (diz que está menos vazio).
-        sem_post(&buffer_vazio);
-			
-		usleep(100 * UNIT_MS);
+	    buffer_index += 1;
 	}
+	
+	//printf("Produzindo item %d ...\n", buffer_index);
+	//fflush(stdout);
+	display.showNumber(num_items);
+	
+	// Libera o buffer.
+	pthread_mutex_unlock(&buffer_mutex);
+	
+	// Incrementa o semáforo (diz que está menos vazio).
+	sem_post(&buffer_vazio);
+		    
+	usleep(100 * UNIT_MS);
+    }
 
 }
 
 void *thread_consumidor(void *valor)
 {
-	int prevType;
-	float perc2;
-	//BlackLib::BlackGPIO entrada_consumidor(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
-	//ADC pot2(AIN1); // pot2 = produtor
-	
-	// A thread pode ser cancelada de forma assíncrona.
+    int prevType;
+    float perc2;
+    ADC pot2(AIN1); // pot2 = produtor
+    
+    // A thread pode ser cancelada de forma assíncrona.
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &prevType);
+    
+    //int val;
+    while (1)
+    {
+	//sem_getvalue(&buffer_vazio, &val);
+	//printf("Semáforo do consumidor: %d\n", val);
+	    
+	perc2 = pot2.getPercentValue();
+	usleep(perc2  * 100 *  UNIT_MS); // Espera muito ou pouco
+
+	// Se o buffer está vazio, espere (decrementa 1 do buffer vazio).
+	sem_wait(&buffer_vazio);
+    
+	// Trava o buffer.
+	pthread_mutex_lock(&buffer_mutex);
 	
-	int val;
-	while (1)
+	// Insere o item no buffer.
+	buffer[buffer_index] = 0;
+	num_items--;
+	if (buffer_index > 0)
 	{
-		sem_getvalue(&buffer_vazio, &val);
-		printf("\Semáforo do consumidor: %d\n", val);
-		
-		perc2 = 20.0;
-		//perc2 = pot2.getPercentValue();
-		usleep(perc2  * 100 *  UNIT_MS); // Espera muito ou pouco
-
-		// Se o buffer está vazio, espere (decrementa 1 do buffer vazio).
-        sem_wait(&buffer_vazio);
-        
-		// Trava o buffer.
-        pthread_mutex_lock(&buffer_mutex);
-        
-        // Insere o item no buffer.
-        buffer[buffer_index] = 0;
-        if (buffer_index > 0)
-        {
-			buffer_index = (buffer_index-1);
-		}
-        printf("Consumindo item %d ...\n", buffer_index);
-        fflush(stdout);
-        
-        // Libera o buffer.
-        pthread_mutex_unlock(&buffer_mutex);
-        
-        // Incrementa o semáforo (diz que está menos cheio).
-        sem_post(&buffer_cheio);
-			
-		usleep(100 * UNIT_MS);
-		
-		
+	    buffer_index -= 1;
 	}
+	
+	//printf("Consumindo item %d ...\n", buffer_index);
+	display.showNumber(num_items);
+	
+	// Libera o buffer.
+	pthread_mutex_unlock(&buffer_mutex);
+	
+	// Incrementa o semáforo (diz que está menos cheio).
+	sem_post(&buffer_cheio);
+			
+	usleep(100 * UNIT_MS);
+	    
+    }
+}
 
+void resetar_buffer(void)
+{
+    int i;
+    buffer_index = 0;
+    num_items = 0;
+    
+    sem_init(&buffer_cheio, 0, BUFFER_SIZE);
+    sem_init(&buffer_vazio, 0, 0);
+    pthread_mutex_init(&buffer_mutex, NULL);
+    
+    for(i = 0; i < BUFFER_SIZE; i++)
+    {
+	buffer[i] = 0;
+    }
 }
 
 
