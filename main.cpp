@@ -14,6 +14,7 @@
 #include <string.h>
 #include <pthread.h> // biblioteca pthread
 #include <semaphore.h>
+#include <vector>
 #include <cmath>
 #include "adc.h"
 
@@ -22,9 +23,9 @@
 
 using namespace std;
 
+vector<int> buffer;//Declarando Buffer
 /****************** Variaveis Globais ***********************/
 pthread_mutex_t work_mutex;
-int numero = 0;
 
 BlackLib::BlackGPIO entrada(BlackLib::GPIO_68, BlackLib::input, BlackLib::SecureMode);
 // Display
@@ -37,12 +38,14 @@ Display display(BlackLib::GPIO_65, BlackLib::GPIO_45,
 
 void *thread_consumidor(void *arg);
 void *thread_produtor(void *arg);
-int controle(int numero,bool action);
+void controle(bool action);
 
 /****************** FIM de Globais ***********************/
 
 int main()
-{
+{	
+	buffer.reserve(7);
+	buffer.clear();
 	int res, valor=0;
 	pthread_t consumdior, produtor;
 	void * statusFinalizacao;
@@ -66,27 +69,12 @@ int main()
 			exit(EXIT_FAILURE);
 		}
 
-		/*
-			printf("Programa principal esperando pelo término das threads...\n");
-			res = pthread_join(consumdior, &statusFinalizacao);
-			if (res != 0) {
-			perror("O thread_join falhou");
-			exit(EXIT_FAILURE);
-			}
-			res = pthread_join(produtor, &statusFinalizacao);
-			if (res != 0) {
-			perror("O thread_join falhou");
-			exit(EXIT_FAILURE);
-			}
-		
-			exit(EXIT_SUCCESS);
-		*/
 		while(entrada.getValue() == "1");
 		pthread_cancel(consumdior);
 		pthread_cancel(produtor);
 		display.showNumber(0);
 		pthread_mutex_unlock(&work_mutex);
-		numero = 0;
+		buffer.clear();//Resetando Buffer 
 		sleep(1);
 	}
 }
@@ -109,12 +97,11 @@ void *thread_produtor(void *valor)
 		//printf("Produtor com perc = %d\n",(int) floor(perc1));
 		usleep(perc1 * 100 * UNIT_MS); // Espera muito ou pouco
 		
-		pthread_mutex_lock(&work_mutex); // Entrando na região crítica
-		numero = controle(numero, true);
-		display.showNumber(numero);
-		//printf("%d\n", numero);
+		while(buffer.size()==7);//Espera
+		controle(true);//Produz Buffer
+		//printf("%d\n", buffer);
 		
-		pthread_mutex_unlock(&work_mutex); // saindo de região critica
+		
 		usleep(100 * UNIT_MS);
 		//pthread_mutex_unlock(&work_mutex); // saindo de região critica
 	}
@@ -135,13 +122,9 @@ void *thread_consumidor(void *valor)
 		
 		//printf("Consumidor com perc = %d\n",(int) floor(perc2));
 		usleep(perc2  * 100 *  UNIT_MS); // Espera muito ou pouco
-		
-		pthread_mutex_lock(&work_mutex); // Entrando na região crítica
-		numero = controle(numero, false);
-		display.showNumber(numero);
-		//printf("%d\n", numero);
-		pthread_mutex_unlock(&work_mutex); // saindo de região critica
-		
+		while(!buffer.empty());//Espera Buffer
+		controle(false);//Consume Buffer
+		//printf("%d\n", buffer);
 		usleep(100 * UNIT_MS);
 		//pthread_mutex_unlock(&work_mutex); // saindo de região critica
 		
@@ -150,24 +133,24 @@ void *thread_consumidor(void *valor)
 
 }
 
-int controle(int numero, bool action)
+void controle(bool action)
 {
-	if (action) // Produtor = true
+	if(action)
 	{
-		numero += 1;
+		pthread_mutex_lock(&work_mutex); // Entrando na região crítica
+		buffer.push_back(1);
+		display.showNumber(buffer.size());
+		pthread_mutex_unlock(&work_mutex); // saindo de região critica
+
 	}
 	else
 	{
-		numero -= 1;
-	}
-	if (numero > 7)
-	{
-		numero = 7;
-	}
-	if (numero < 0)
-	{
-		numero = 0;
+		pthread_mutex_lock(&work_mutex); // Entrando na região crítica
+		buffer.pop_back();
+		display.showNumber(buffer.size());
+		pthread_mutex_unlock(&work_mutex); // saindo de região critica
+
 	}
 
-	return numero;
+
 }
